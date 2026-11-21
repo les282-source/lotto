@@ -6,8 +6,8 @@
 <title>Amy's Lotto</title>
 <style>
   :root {
-    --bg-top: #0b1230;
-    --bg-bottom: #02040f;
+    --bg-top: #14112a;
+    --bg-bottom: #06050c;
     --gold: #ffd54a;
     --ball-size: clamp(44px, 13vw, 76px);
     --gap: clamp(6px, 2vw, 16px);
@@ -26,8 +26,13 @@
     padding: 24px 16px;
     font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
     color: #fff;
-    background: radial-gradient(ellipse at 50% 20%, #1b2a6b 0%, var(--bg-top) 45%, var(--bg-bottom) 100%);
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(140,100,255,.28), transparent 70%),
+      radial-gradient(ellipse 60% 50% at 0% 100%, rgba(40,200,190,.14), transparent 70%),
+      radial-gradient(ellipse 60% 50% at 100% 100%, rgba(255,110,170,.12), transparent 70%),
+      linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
     background-color: var(--bg-bottom);
+    background-attachment: fixed;
     overflow-x: hidden;
   }
 
@@ -74,7 +79,7 @@
     height: 140vh;
     pointer-events: none;
     z-index: 0;
-    background: linear-gradient(to bottom, rgba(120,170,255,.18), rgba(120,170,255,0) 70%);
+    background: linear-gradient(to bottom, rgba(255,236,200,.10), rgba(255,236,200,0) 70%);
     filter: blur(20px);
     transform-origin: top center;
     animation: sweep 9s ease-in-out infinite alternate;
@@ -136,7 +141,7 @@
   .subtitle {
     margin-top: 10px;
     font-size: clamp(13px, 3.6vw, 16px);
-    color: rgba(220,230,255,.75);
+    color: rgba(232,226,255,.75);
   }
 
   /* ---------- 추첨판 ---------- */
@@ -296,7 +301,7 @@
     margin-top: 22px;
     min-height: 1.5em;
     font-size: clamp(13px, 3.6vw, 15px);
-    color: rgba(220,230,255,.8);
+    color: rgba(232,226,255,.8);
     letter-spacing: .02em;
   }
   .status strong { color: var(--gold); }
@@ -367,7 +372,7 @@
     gap: 8px 14px;
     margin-top: 28px;
     font-size: 12px;
-    color: rgba(220,230,255,.6);
+    color: rgba(232,226,255,.6);
   }
   .legend i {
     display: inline-block;
