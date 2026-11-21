@@ -383,6 +383,33 @@
     .balls { flex-wrap: wrap; max-width: calc(var(--ball-size) * 3 + var(--gap) * 2); margin: 0 auto; row-gap: 26px; }
   }
 
+  /* ---------- 꽃가루 / 소리 버튼 ---------- */
+  #confetti {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+  }
+  .sound-btn {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 6;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sound-btn:active { transform: scale(.92); }
+  .sound-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
   @media (prefers-reduced-motion: reduce) {
     .star, .spotlight, .board::before, .draw-btn::before, .badge { animation: none; }
   }
@@ -392,6 +419,8 @@
   <div id="stars" aria-hidden="true"></div>
   <div class="spotlight left" aria-hidden="true"></div>
   <div class="spotlight right" aria-hidden="true"></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+  <button class="sound-btn" id="soundBtn" type="button" aria-label="소리 끄기" title="소리 켜기/끄기">🔊</button>
 
   <main>
     <div class="badge">LIVE DRAW</div>
@@ -470,12 +499,249 @@
     return 'green';
   }
 
+  // ================= 효과음 (Web Audio API) =================
+  let audioCtx = null;
+  let soundOn = true;
+  let noiseBuffer = null;
+  let drumrollStop = null;
+
+  const soundBtn = document.getElementById('soundBtn');
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '🔊' : '🔇';
+    soundBtn.setAttribute('aria-label', soundOn ? '소리 끄기' : '소리 켜기');
+    if (!soundOn && drumrollStop) drumrollStop();
+  });
+
+  function getAudio() {
+    if (!soundOn) return null;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) {
+      audioCtx = new AC();
+      // 1초짜리 화이트 노이즈 (스네어·심벌용)
+      noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  // 스네어 한 번 치기
+  function snareHit(ctx, out, t, vol) {
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1800 + Math.random() * 400;
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+    src.connect(bp).connect(g).connect(out);
+    src.start(t, Math.random() * 0.5, 0.1);
+  }
+
+  // 낮은 북 (팀파니 느낌)
+  function tomHit(ctx, out, t, vol) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(55, t + 0.25);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 0.32);
+  }
+
+  // 두구두구 드럼롤: 점점 빠르고 크게
+  function startDrumroll(duration) {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const out = ctx.createGain();
+    out.gain.value = 1;
+    out.connect(ctx.destination);
+    const start = ctx.currentTime + 0.02;
+    let t = start;
+    while (t < start + duration) {
+      const p = (t - start) / duration;          // 0 → 1
+      snareHit(ctx, out, t, 0.12 + p * 0.33 + Math.random() * 0.05);
+      t += 0.065 - p * 0.025;                      // 간격이 점점 짧아짐
+    }
+    // 0.5초마다 "둥!"
+    for (let b = 0; b < duration; b += 0.5) tomHit(ctx, out, start + b, 0.35 + (b / duration) * 0.4);
+
+    drumrollStop = () => {
+      const now = ctx.currentTime;
+      out.gain.cancelScheduledValues(now);
+      out.gain.setValueAtTime(out.gain.value, now);
+      out.gain.linearRampToValueAtTime(0, now + 0.05);
+      setTimeout(() => out.disconnect(), 200);
+      drumrollStop = null;
+    };
+  }
+
+  // 공이 튀어나올 때 "뿅"
+  function popSound(index) {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    const base = 520 + index * 70;
+    o.frequency.setValueAtTime(base, t);
+    o.frequency.exponentialRampToValueAtTime(base * 2, t + 0.08);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    o.connect(g).connect(ctx.destination);
+    o.start(t);
+    o.stop(t + 0.2);
+  }
+
+  // 심벌 "챙!" + 팡파르
+  function fanfare() {
+    const ctx = getAudio();
+    if (!ctx) return;
+    const t = ctx.currentTime + 0.02;
+
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 5000;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(0.45, t);
+    cg.gain.exponentialRampToValueAtTime(0.001, t + 1.8);
+    src.connect(hp).connect(cg).connect(ctx.destination);
+    src.start(t);
+    src.stop(t + 1.9);
+    tomHit(ctx, ctx.destination, t, 0.8);
+
+    // 도-미-솔-도~ (C장조 팡파르)
+    const notes = [
+      [523.25, 0.00, 0.14], [659.25, 0.14, 0.14], [783.99, 0.28, 0.14],
+      [1046.5, 0.42, 0.9],
+    ];
+    notes.forEach(([f, d, len]) => {
+      [1, 1.5].forEach((mul, k) => {           // 화음을 살짝 두껍게
+        const o = ctx.createOscillator();
+        o.type = k === 0 ? 'square' : 'triangle';
+        o.frequency.value = f * (k === 0 ? 1 : mul);
+        const g = ctx.createGain();
+        const st = t + d;
+        const vol = k === 0 ? 0.07 : 0.05;
+        g.gain.setValueAtTime(0.0001, st);
+        g.gain.exponentialRampToValueAtTime(vol, st + 0.02);
+        g.gain.setValueAtTime(vol, st + len * 0.7);
+        g.gain.exponentialRampToValueAtTime(0.001, st + len);
+        o.connect(g).connect(ctx.destination);
+        o.start(st);
+        o.stop(st + len + 0.05);
+      });
+    });
+  }
+
+  // ================= 꽃가루 =================
+  const confettiCanvas = document.getElementById('confetti');
+  const cctx = confettiCanvas.getContext('2d');
+  const CONFETTI_COLORS = ['#fbc400', '#1e88e5', '#e53935', '#bdbdbd', '#43a047', '#ffd54a', '#ff6fb5', '#ffffff'];
+  let pieces = [];
+  let confettiRunning = false;
+
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    confettiCanvas.width = innerWidth * dpr;
+    confettiCanvas.height = innerHeight * dpr;
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  function spawn(x, y, count, angle, spread, speed) {
+    for (let i = 0; i < count; i++) {
+      const a = angle + (Math.random() - 0.5) * spread;
+      const v = speed * (0.55 + Math.random() * 0.6);
+      pieces.push({
+        x, y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        w: 6 + Math.random() * 6,
+        h: 8 + Math.random() * 10,
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.35,
+        flip: Math.random() * Math.PI * 2,
+        vflip: 0.08 + Math.random() * 0.15,
+        color: CONFETTI_COLORS[(Math.random() * CONFETTI_COLORS.length) | 0],
+        round: Math.random() < 0.25,
+        life: 0,
+      });
+    }
+  }
+
+  function burstConfetti() {
+    const w = innerWidth, h = innerHeight;
+    const n = w < 600 ? 70 : 130;
+    const sp = Math.max(14, Math.min(22, h / 38));
+    spawn(0, h * 0.85, n, -Math.PI / 3, 0.9, sp);              // 왼쪽 아래 → 위로
+    spawn(w, h * 0.85, n, -Math.PI * 2 / 3, 0.9, sp);          // 오른쪽 아래 → 위로
+    setTimeout(() => spawn(w / 2, h * 0.35, n, -Math.PI / 2, Math.PI * 2, sp * 0.7), 250); // 가운데 펑!
+    if (!confettiRunning) {
+      confettiRunning = true;
+      requestAnimationFrame(tickConfetti);
+    }
+  }
+
+  function tickConfetti() {
+    const h = innerHeight;
+    cctx.clearRect(0, 0, innerWidth, h);
+    pieces = pieces.filter(p => p.y < h + 40 && p.life < 420);
+    for (const p of pieces) {
+      p.life++;
+      p.vy += 0.32;            // 중력
+      p.vx *= 0.985;           // 공기 저항
+      p.vy *= 0.985;
+      p.x += p.vx + Math.sin(p.life / 12) * 0.6;   // 살랑살랑
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.flip += p.vflip;
+
+      cctx.save();
+      cctx.translate(p.x, p.y);
+      cctx.rotate(p.rot);
+      cctx.scale(1, Math.cos(p.flip));            // 뒤집히는 느낌
+      cctx.fillStyle = p.color;
+      if (p.round) {
+        cctx.beginPath();
+        cctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
+        cctx.fill();
+      } else {
+        cctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      }
+      cctx.restore();
+    }
+    if (pieces.length) {
+      requestAnimationFrame(tickConfetti);
+    } else {
+      confettiRunning = false;
+      cctx.clearRect(0, 0, innerWidth, h);
+    }
+  }
+
+  // ================= 추첨 =================
   function draw() {
     drawBtn.disabled = true;
     renderSlots();
     const numbers = pickNumbers();
     const slots = ballsEl.querySelectorAll('.slot');
-    statusEl.textContent = '추첨 중...';
+    statusEl.textContent = '두구두구두구... 🥁';
+    const lastAt = INTERVAL * (numbers.length - 1) + 150;
+    startDrumroll((lastAt + 750) / 1000);
 
     numbers.forEach((n, i) => {
       setTimeout(() => {
@@ -491,9 +757,13 @@
         ball.setAttribute('aria-label', n + '번');
 
         slot.append(burst, ball);
+        popSound(i);
 
         if (i === numbers.length - 1) {
           setTimeout(() => {
+            if (drumrollStop) drumrollStop();
+            fanfare();
+            burstConfetti();
             statusEl.innerHTML = '🎉 이번 행운의 번호는 <strong>' + numbers.join(', ') + '</strong> 입니다!';
             drawBtn.disabled = false;
             drawBtn.textContent = '🎱 다시 뽑기';
