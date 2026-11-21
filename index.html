@@ -437,7 +437,7 @@
       <p class="status" id="status">버튼을 눌러 추첨을 시작하세요</p>
     </section>
 
-    <button class="draw-btn" id="drawBtn" type="button">🎱 번호 뽑기</button>
+    <button class="draw-btn" id="drawBtn" type="button">🎱 Draw Numbers</button>
 
     <div class="legend" aria-hidden="true">
       <span><i style="background:#fbc400"></i>1~10</span>
@@ -771,7 +771,7 @@
             burstConfetti();
             statusEl.innerHTML = '🎉 이번 행운의 번호는 <strong>' + numbers.join(', ') + '</strong> 입니다!';
             drawBtn.disabled = false;
-            drawBtn.textContent = '🎱 다시 뽑기';
+            drawBtn.textContent = '🎱 Draw Again';
           }, 900);
         }
       }, INTERVAL * i + 150);
